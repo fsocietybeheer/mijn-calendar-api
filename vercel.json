@@ -1,12 +1,6 @@
 {
   "functions": {
-    "api/availability.js": {
-      "runtime": "nodejs20.x"
-    },
-    "api/book.js": {
-      "runtime": "nodejs20.x"
-    },
-    "api/webhook.js": {
+    "api/**/*.js": {
       "runtime": "nodejs20.x"
     }
   }
