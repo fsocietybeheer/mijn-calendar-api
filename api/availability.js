@@ -17,7 +17,14 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { startDate, endDate } = req.query;
+    let { startDate, endDate } = req.query;
+    
+    // Fix: If endDate is an array, take the first valid-looking value
+    if (Array.isArray(endDate)) {
+      console.log('endDate is array:', endDate);
+      endDate = endDate.find(date => date && date.match(/^\d{4}-\d{2}-\d{2}$/));
+      console.log('Selected endDate from array:', endDate);
+    }
     
     // ADD DEBUG LOGGING
     console.log('Received startDate:', startDate);
