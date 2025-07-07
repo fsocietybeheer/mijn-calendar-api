@@ -1,0 +1,6 @@
+# Maak een .gitignore bestand
+.env.local
+.env
+*.env
+node_modules/
+.vercel
