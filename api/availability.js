@@ -19,39 +19,67 @@ module.exports = async function handler(req, res) {
   try {
     const { startDate, endDate } = req.query;
     
+    // ADD DEBUG LOGGING
+    console.log('Received startDate:', startDate);
+    console.log('Received endDate:', endDate);
+    console.log('startDate type:', typeof startDate);
+    console.log('endDate type:', typeof endDate);
+    
     if (!startDate || !endDate) {
       res.status(400).json({ error: 'startDate and endDate are required' });
       return;
     }
 
-    // Fix: Convert dates to proper ISO format with timezone
-    const startDateTime = new Date(startDate + 'T00:00:00.000Z').toISOString();
-    const endDateTime = new Date(endDate + 'T23:59:59.999Z').toISOString();
+    // Test if dates are valid
+    const testStartDate = new Date(startDate);
+    const testEndDate = new Date(endDate);
+    
+    console.log('Parsed startDate:', testStartDate);
+    console.log('Parsed endDate:', testEndDate);
+    console.log('startDate isValid:', !isNaN(testStartDate.getTime()));
+    console.log('endDate isValid:', !isNaN(testEndDate.getTime()));
+    
+    if (isNaN(testStartDate.getTime()) || isNaN(testEndDate.getTime())) {
+      res.status(400).json({ error: 'Invalid date format' });
+      return;
+    }
 
-    console.log('Fetching events from:', startDateTime, 'to:', endDateTime);
+    const events = await getEvents(startDate, endDate);
+    console.log('Events retrieved:', events.length);
 
-    const events = await getEvents(startDateTime, endDateTime);
-
-    // Bereken beschikbare dagen
+    // Calculate available days
     const availability = calculateAvailability(events, startDate, endDate);
 
     res.json(availability);
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('Full error:', error);
     res.status(500).json({ error: 'Failed to fetch availability', details: error.message });
   }
 };
 
 function calculateAvailability(events, startDate, endDate) {
   const available = [];
+  
+  console.log('calculateAvailability called with:', { startDate, endDate });
+  
   const start = new Date(startDate);
   const end = new Date(endDate);
   
-  // Better approach: use a separate counter
+  console.log('Parsed dates in function:', { start, end });
+  
+  // Check if dates are valid
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    console.error('Invalid dates in calculateAvailability');
+    throw new Error('Invalid date values');
+  }
+  
   const currentDate = new Date(start);
   
   while (currentDate <= end) {
+    console.log('Processing date:', currentDate);
+    
     const dateStr = currentDate.toISOString().split('T')[0];
+    console.log('Date string:', dateStr);
     
     const hasEvent = events.some(event => {
       const eventDate = new Date(event.start.dateTime || event.start.date);
@@ -67,5 +95,6 @@ function calculateAvailability(events, startDate, endDate) {
     currentDate.setDate(currentDate.getDate() + 1);
   }
   
+  console.log('Final availability:', available);
   return available;
 }
