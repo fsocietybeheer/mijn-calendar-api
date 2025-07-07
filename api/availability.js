@@ -46,20 +46,26 @@ function calculateAvailability(events, startDate, endDate) {
   const available = [];
   const start = new Date(startDate);
   const end = new Date(endDate);
-
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dateStr = d.toISOString().split('T')[0];
+  
+  // Better approach: use a separate counter
+  const currentDate = new Date(start);
+  
+  while (currentDate <= end) {
+    const dateStr = currentDate.toISOString().split('T')[0];
     
     const hasEvent = events.some(event => {
       const eventDate = new Date(event.start.dateTime || event.start.date);
       return eventDate.toISOString().split('T')[0] === dateStr;
     });
-
+    
     available.push({
       date: dateStr,
       available: !hasEvent
     });
+    
+    // Move to next day
+    currentDate.setDate(currentDate.getDate() + 1);
   }
-
+  
   return available;
 }
