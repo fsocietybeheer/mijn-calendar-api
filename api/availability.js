@@ -20,14 +20,14 @@ module.exports = async function handler(req, res) {
     let { startDate, endDate } = req.query;
     
     // Debug logging
-    console.log('Raw query:', req.query);
-    console.log('Received startDate:', startDate);
-    console.log('Received endDate:', endDate);
+    console.log('🔍 Raw query:', req.query);
+    console.log('🔍 Received startDate:', startDate);
+    console.log('🔍 Received endDate:', endDate);
     
     // Fix voor als endDate een array is (routing probleem)
     if (Array.isArray(endDate)) {
       endDate = endDate[endDate.length - 1];
-      console.log('Fixed endDate from array:', endDate);
+      console.log('🔍 Fixed endDate from array:', endDate);
     }
     
     if (!startDate || !endDate) {
@@ -54,30 +54,41 @@ module.exports = async function handler(req, res) {
     const timeMin = new Date(startDate + 'T00:00:00.000Z').toISOString();
     const timeMax = new Date(endDate + 'T23:59:59.999Z').toISOString();
 
-    console.log('Calling getEvents with:', { timeMin, timeMax });
+    console.log('🔍 Calling getEvents with:', { timeMin, timeMax });
 
     const events = await getEvents(timeMin, timeMax);
 
-    // DEBUG: Log alle events met hun exacte datums
+    // VERBETERDE DEBUG: Log alle events met hun exacte datums
     console.log('📊 Total events found:', events.length);
+    console.log('📊 Current server time:', new Date().toISOString());
+    console.log('📊 Server timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
+    
     events.forEach((event, index) => {
-      console.log(`🔍 Event ${index + 1}:`, {
-        summary: event.summary,
-        start: {
-          dateTime: event.start?.dateTime,
-          date: event.start?.date,
-          timeZone: event.start?.timeZone
-        },
-        end: {
-          dateTime: event.end?.dateTime,
-          date: event.end?.date,
-          timeZone: event.end?.timeZone
-        }
-      });
+      console.log(`\n🔍 Event ${index + 1}: "${event.summary}"`);
+      console.log('  Raw start:', event.start);
+      console.log('  Raw end:', event.end);
+      
+      if (event.start?.date) {
+        console.log('  → ALL-DAY EVENT');
+        console.log('  → Start date:', event.start.date);
+        console.log('  → End date (exclusive):', event.end.date);
+      } else if (event.start?.dateTime) {
+        console.log('  → TIMED EVENT');
+        console.log('  → Start dateTime:', event.start.dateTime);
+        console.log('  → End dateTime:', event.end.dateTime);
+        console.log('  → Start timezone:', event.start.timeZone);
+      }
     });
 
     // Bereken beschikbare dagen (verbeterde versie)
     const availability = calculateAvailability(events, startDate, endDate);
+
+    // EXTRA DEBUG: Toon welke dagen als bezet worden gemarkeerd
+    const blockedDays = availability.filter(day => !day.available);
+    console.log('\n🚫 BLOCKED DAYS SUMMARY:');
+    blockedDays.forEach(day => {
+      console.log(`  → ${day.date} (${day.dayOfWeek})`);
+    });
 
     res.json({
       success: true,
@@ -87,12 +98,14 @@ module.exports = async function handler(req, res) {
       totalEvents: events.length,
       debug: {
         eventsProcessed: events.length,
-        blockedDates: availability.filter(day => !day.available).map(day => day.date)
+        blockedDates: availability.filter(day => !day.available).map(day => day.date),
+        serverTime: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
       }
     });
 
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('❌ API Error:', error);
     res.status(500).json({ 
       error: 'Failed to fetch availability',
       details: error.message 
@@ -105,25 +118,36 @@ function calculateAvailability(events, startDate, endDate) {
   const start = new Date(startDate);
   const end = new Date(endDate);
 
+  console.log('\n🔄 CALCULATING AVAILABILITY:');
+  console.log('  Start date:', startDate);
+  console.log('  End date:', endDate);
+
   // STAP 1: Verzamel alle geblokkeerde datums van alle events
   const blockedDates = new Set();
   
-  events.forEach(event => {
+  events.forEach((event, index) => {
     if (!event.start) return;
     
+    console.log(`\n📅 Processing event ${index + 1}: "${event.summary}"`);
     const blockedDatesForEvent = getBlockedDatesFromEvent(event);
+    console.log(`  → Blocked dates: [${blockedDatesForEvent.join(', ')}]`);
+    
     blockedDatesForEvent.forEach(date => blockedDates.add(date));
   });
 
-  console.log('🚫 All blocked dates:', Array.from(blockedDates));
+  console.log('\n🚫 ALL BLOCKED DATES:', Array.from(blockedDates).sort());
 
   // STAP 2: Loop door alle dagen tussen start en eind
+  console.log('\n📊 AVAILABILITY CALCULATION:');
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const dateStr = d.toISOString().split('T')[0];
+    const isBlocked = blockedDates.has(dateStr);
+    
+    console.log(`  ${dateStr}: ${isBlocked ? '🚫 BLOCKED' : '✅ AVAILABLE'}`);
     
     available.push({
       date: dateStr,
-      available: !blockedDates.has(dateStr),
+      available: !isBlocked,
       dayOfWeek: d.toLocaleDateString('nl-NL', { weekday: 'long' })
     });
   }
@@ -141,37 +165,40 @@ function getBlockedDatesFromEvent(event) {
       const startDate = event.start.date; // YYYY-MM-DD
       const endDate = event.end.date;     // YYYY-MM-DD (exclusief!)
       
-      console.log(`📅 All-day event "${event.summary}": Start: ${startDate}, End: ${endDate} (exclusive)`);
+      console.log(`    📅 All-day event processing:`);
+      console.log(`      Start: ${startDate}`);
+      console.log(`      End: ${endDate} (exclusive)`);
       
-      // Parse start datum
-      const currentDate = new Date(startDate + 'T00:00:00');
-      const exclusiveEndDate = new Date(endDate + 'T00:00:00');
+      // Parse start datum - BELANGRIJK: gebruik lokale tijd, niet UTC
+      const currentDate = new Date(startDate + 'T12:00:00'); // Middag om tijdzone problemen te voorkomen
+      const exclusiveEndDate = new Date(endDate + 'T12:00:00');
+      
+      console.log(`      Parsed start: ${currentDate.toISOString()}`);
+      console.log(`      Parsed end: ${exclusiveEndDate.toISOString()}`);
       
       // Loop van start tot (exclusieve) end
       while (currentDate < exclusiveEndDate) {
         const dateStr = currentDate.toISOString().split('T')[0];
         blockedDates.push(dateStr);
-        console.log(`  → Blocking date: ${dateStr}`);
+        console.log(`      → Blocking date: ${dateStr}`);
         
         // Ga naar volgende dag
         currentDate.setDate(currentDate.getDate() + 1);
       }
       
-      console.log(`📅 All-day event "${event.summary}": Blocked dates: [${blockedDates.join(', ')}]`);
-      
     } else if (event.start.dateTime) {
-      // Timed event - pak alleen start datum in Nederlandse tijdzone
+      // Timed event - pak alleen start datum
       const startDateTime = new Date(event.start.dateTime);
       
       // Converteer naar Nederlandse datum
       const dateInNL = startDateTime.toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
       blockedDates.push(dateInNL);
       
-      console.log(`⏰ Timed event "${event.summary}": ${event.start.dateTime} -> ${dateInNL}`);
+      console.log(`    ⏰ Timed event: ${event.start.dateTime} -> ${dateInNL}`);
     }
     
   } catch (error) {
-    console.error(`Error processing event "${event.summary}":`, error);
+    console.error(`❌ Error processing event "${event.summary}":`, error);
   }
   
   return blockedDates;
