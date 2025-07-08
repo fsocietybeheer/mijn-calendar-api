@@ -131,28 +131,33 @@ function calculateAvailability(events, startDate, endDate) {
   return available;
 }
 
-// GEFIXTE VERSIE - EENVOUDIG EN BETROUWBAAR
+// GEFIXTE VERSIE - Nu correct voor all-day events
 function getBlockedDatesFromEvent(event) {
   const blockedDates = [];
   
   try {
     if (event.start.date) {
-      // All-day event - gebruik start en end date
-      // Deze zijn al in YYYY-MM-DD format en hoeven geen timezone conversie
-      const startDate = event.start.date;
-      const endDate = event.end.date;
+      // All-day event - Google Calendar gebruikt exclusieve end-dates
+      const startDate = event.start.date; // YYYY-MM-DD
+      const endDate = event.end.date;     // YYYY-MM-DD (exclusief!)
       
-      // Parse de datums
-      const start = new Date(startDate + 'T00:00:00');
-      const end = new Date(endDate + 'T00:00:00');
-      end.setDate(end.getDate() - 1); // Google Calendar end is exclusief
+      console.log(`📅 All-day event "${event.summary}": Start: ${startDate}, End: ${endDate} (exclusive)`);
       
-      // Genereer alle dagen
-      for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-        blockedDates.push(date.toISOString().split('T')[0]);
+      // Parse start datum
+      const currentDate = new Date(startDate + 'T00:00:00');
+      const exclusiveEndDate = new Date(endDate + 'T00:00:00');
+      
+      // Loop van start tot (exclusieve) end
+      while (currentDate < exclusiveEndDate) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        blockedDates.push(dateStr);
+        console.log(`  → Blocking date: ${dateStr}`);
+        
+        // Ga naar volgende dag
+        currentDate.setDate(currentDate.getDate() + 1);
       }
       
-      console.log(`📅 All-day event "${event.summary}": ${startDate} to ${endDate} (exclusive) -> [${blockedDates.join(', ')}]`);
+      console.log(`📅 All-day event "${event.summary}": Blocked dates: [${blockedDates.join(', ')}]`);
       
     } else if (event.start.dateTime) {
       // Timed event - pak alleen start datum in Nederlandse tijdzone
