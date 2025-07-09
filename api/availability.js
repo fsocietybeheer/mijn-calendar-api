@@ -155,7 +155,7 @@ function calculateAvailability(events, startDate, endDate) {
   return available;
 }
 
-// GEFIXTE VERSIE - Nu correct voor all-day events
+// VOLLEDIG GEFIXTE VERSIE - Correct timezone handling
 function getBlockedDatesFromEvent(event) {
   const blockedDates = [];
   
@@ -169,9 +169,10 @@ function getBlockedDatesFromEvent(event) {
       console.log(`      Start: ${startDate}`);
       console.log(`      End: ${endDate} (exclusive)`);
       
-      // Parse start datum - BELANGRIJK: gebruik lokale tijd, niet UTC
-      const currentDate = new Date(startDate + 'T12:00:00'); // Middag om tijdzone problemen te voorkomen
-      const exclusiveEndDate = new Date(endDate + 'T12:00:00');
+      // KRITIEKE FIX: Parse datums ZONDER timezone conversie
+      // Door geen 'Z' toe te voegen wordt het geïnterpreteerd als lokale tijd
+      const currentDate = new Date(startDate + 'T00:00:00');
+      const exclusiveEndDate = new Date(endDate + 'T00:00:00');
       
       console.log(`      Parsed start: ${currentDate.toISOString()}`);
       console.log(`      Parsed end: ${exclusiveEndDate.toISOString()}`);
@@ -187,11 +188,13 @@ function getBlockedDatesFromEvent(event) {
       }
       
     } else if (event.start.dateTime) {
-      // Timed event - pak alleen start datum
+      // Timed event - converteer naar Nederlandse datum
       const startDateTime = new Date(event.start.dateTime);
       
-      // Converteer naar Nederlandse datum
-      const dateInNL = startDateTime.toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+      // Converteer naar Nederlandse datum (Europe/Amsterdam timezone)
+      const dateInNL = startDateTime.toLocaleDateString('sv-SE', { 
+        timeZone: 'Europe/Amsterdam' 
+      });
       blockedDates.push(dateInNL);
       
       console.log(`    ⏰ Timed event: ${event.start.dateTime} -> ${dateInNL}`);
