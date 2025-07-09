@@ -155,7 +155,7 @@ function calculateAvailability(events, startDate, endDate) {
   return available;
 }
 
-// VOLLEDIG GEFIXTE VERSIE - Correct timezone handling
+// VOLLEDIG GEFIXTE VERSIE - Vercel UTC timezone proof
 function getBlockedDatesFromEvent(event) {
   const blockedDates = [];
   
@@ -169,17 +169,29 @@ function getBlockedDatesFromEvent(event) {
       console.log(`      Start: ${startDate}`);
       console.log(`      End: ${endDate} (exclusive)`);
       
-      // KRITIEKE FIX: Parse datums ZONDER timezone conversie
-      // Door geen 'Z' toe te voegen wordt het geïnterpreteerd als lokale tijd
-      const currentDate = new Date(startDate + 'T00:00:00');
-      const exclusiveEndDate = new Date(endDate + 'T00:00:00');
+      // DEFINITIEVE FIX: Vercel draait in UTC, dus we moeten expliciet Nederlandse timezone gebruiken
+      // Parse de datum strings als Nederlandse datums
+      const startDateParts = startDate.split('-');
+      const endDateParts = endDate.split('-');
+      
+      // Maak Nederlandse datums (Europe/Amsterdam timezone)
+      const currentDate = new Date();
+      currentDate.setFullYear(parseInt(startDateParts[0]), parseInt(startDateParts[1]) - 1, parseInt(startDateParts[2]));
+      currentDate.setHours(0, 0, 0, 0);
+      
+      const exclusiveEndDate = new Date();
+      exclusiveEndDate.setFullYear(parseInt(endDateParts[0]), parseInt(endDateParts[1]) - 1, parseInt(endDateParts[2]));
+      exclusiveEndDate.setHours(0, 0, 0, 0);
       
       console.log(`      Parsed start: ${currentDate.toISOString()}`);
       console.log(`      Parsed end: ${exclusiveEndDate.toISOString()}`);
       
       // Loop van start tot (exclusieve) end
       while (currentDate < exclusiveEndDate) {
-        const dateStr = currentDate.toISOString().split('T')[0];
+        // Converteer naar YYYY-MM-DD formaat in Nederlandse timezone
+        const dateStr = currentDate.toLocaleDateString('sv-SE', {
+          timeZone: 'Europe/Amsterdam'
+        });
         blockedDates.push(dateStr);
         console.log(`      → Blocking date: ${dateStr}`);
         
