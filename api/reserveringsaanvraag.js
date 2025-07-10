@@ -16,10 +16,23 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const { name, email, description, dates } = req.body;
-  if (!name || !email || !dates) {
+  const { name, email, phone, persons, description, dates } = req.body;
+  if (!name || !email || !phone || !persons || persons < 1 || persons > 4 || !dates) {
     res.status(400).json({ error: 'Missing required fields' });
     return;
+  }
+
+  // Format data naar dag-maand-jaar
+  function formatDate(dateStr) {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}-${month}-${year}`;
+  }
+  let formattedDates = dates;
+  if (dates.includes('t/m')) {
+    const [start, end] = dates.split(' t/m ');
+    formattedDates = `${formatDate(start)} t/m ${formatDate(end)}`;
+  } else {
+    formattedDates = formatDate(dates);
   }
 
   // LET OP: GEEN SPATIE aan het eind van je wachtwoord!
@@ -35,7 +48,7 @@ module.exports = async function handler(req, res) {
     from: 'noreply@casalucy.nl',
     to: 'casalucyjavea@gmail.com',
     subject: 'Nieuwe reserveringsaanvraag',
-    text: `Naam: ${name}\nEmail: ${email}\nData: ${dates}\nOpmerkingen: ${description || ''}`,
+    text: `Naam: ${name}\nEmail: ${email}\nTelefoonnummer: ${phone}\nAantal personen: ${persons}\nData: ${formattedDates}\nOpmerkingen: ${description || ''}`,
   };
 
   try {
