@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 
 module.exports = async function handler(req, res) {
+  // Zet CORS headers altijd bovenaan
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -21,12 +22,12 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  // Vul hieronder je eigen Gmail-adres en app-wachtwoord in
+  // LET OP: GEEN SPATIE aan het eind van je wachtwoord!
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: 'casalucyjavea@gmail.com', // <-- Vervang door je eigen Gmail-adres
-      pass: 'mihd eouf asue tpno',       // <-- Vervang door je Gmail app-wachtwoord
+      user: 'casalucyjavea@gmail.com',
+      pass: 'mihd eouf asue tpno', // <-- zonder spatie aan het eind!
     },
   });
 
@@ -41,6 +42,7 @@ module.exports = async function handler(req, res) {
     await transporter.sendMail(mailOptions);
     res.json({ success: true });
   } catch (error) {
+    console.error(error); // Log de echte fout in Vercel logs!
     res.status(500).json({ error: 'E-mail verzenden mislukt' });
   }
 }; 
