@@ -53,6 +53,15 @@ module.exports = async function handler(req, res) {
 
   try {
     await transporter.sendMail(mailOptions);
+
+    // E-mail naar gast
+    const guestMailOptions = {
+      from: 'noreply@casalucy.nl',
+      to: email,
+      subject: 'Bevestiging reserveringsaanvraag Casa Lucy',
+      text: `Beste ${name},\n\nBedankt voor je reserveringsaanvraag bij Casa Lucy. Wij nemen zo snel mogelijk contact met je op.\n\nGegevens aanvraag:\n- Data: ${formattedDates}\n- Aantal personen: ${persons}\n- Telefoonnummer: ${phone}\n- Nationaliteit: ${nationality}\n- Opmerkingen: ${description || '-'}\n\nMet vriendelijke groet,\nCasa Lucy`,
+    }
+    await transporter.sendMail(guestMailOptions)
     res.json({ success: true });
   } catch (error) {
     console.error(error); // Log de echte fout in Vercel logs!
