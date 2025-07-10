@@ -26,7 +26,7 @@ module.exports = async function handler(req, res) {
     service: 'gmail',
     auth: {
       user: 'casalucyjavea@gmail.com', // <-- Vervang door je eigen Gmail-adres
-      pass: 'mihd eouf asue tpno ',       // <-- Vervang door je Gmail app-wachtwoord
+      pass: 'mihd eouf asue tpno',       // <-- Vervang door je Gmail app-wachtwoord
     },
   });
 
