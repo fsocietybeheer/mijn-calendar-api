@@ -19,7 +19,7 @@ module.exports = async function handler(req, res) {
   try {
     const { date, time, name, email, description } = req.body;
     
-    if (!date || !time || !name || !email) {
+    if (!date || !name || !email) {
       res.status(400).json({ error: 'Missing required fields' });
       return;
     }
@@ -36,15 +36,16 @@ module.exports = async function handler(req, res) {
     }
 
     // Create the event
+    const eventTime = time && time.length > 0 ? time : "12:00";
     const eventData = {
       summary: `Booking: ${name}`,
       description: description || '',
       start: {
-        dateTime: `${date}T${time}:00`,
+        dateTime: `${date}T${eventTime}:00`,
         timeZone: 'Europe/Amsterdam',
       },
       end: {
-        dateTime: `${date}T${time}:00`,
+        dateTime: `${date}T${eventTime}:00`,
         timeZone: 'Europe/Amsterdam',
       },
       attendees: [{ email: email }],
