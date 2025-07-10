@@ -45,7 +45,7 @@ module.exports = async function handler(req, res) {
   });
 
   const mailOptions = {
-    from: 'noreply@casalucy.nl',
+    from: 'casalucyjavea@gmail.com',
     to: 'casalucyjavea@gmail.com',
     subject: 'Nieuwe reserveringsaanvraag',
     text: `Naam: ${name}\nEmail: ${email}\nNationaliteit: ${nationality}\nTelefoonnummer: ${phone}\nAantal personen: ${persons}\nData: ${formattedDates}\nOpmerkingen: ${description || ''}`,
@@ -56,7 +56,7 @@ module.exports = async function handler(req, res) {
 
     // E-mail naar gast
     const guestMailOptions = {
-      from: 'noreply@casalucy.nl',
+      from: 'casalucyjavea@gmail.com',
       to: email,
       subject: 'Bevestiging reserveringsaanvraag Casa Lucy',
       text: `Beste ${name},\n\nBedankt voor je reserveringsaanvraag bij Casa Lucy. Wij nemen zo snel mogelijk contact met je op.\n\nGegevens aanvraag:\n- Data: ${formattedDates}\n- Aantal personen: ${persons}\n- Telefoonnummer: ${phone}\n- Nationaliteit: ${nationality}\n- Opmerkingen: ${description || '-'}\n\nMet vriendelijke groet,\nCasa Lucy`,
