@@ -16,8 +16,8 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const { name, email, phone, persons, description, dates } = req.body;
-  if (!name || !email || !phone || !persons || persons < 1 || persons > 4 || !dates) {
+  const { name, email, nationality, phone, persons, description, dates } = req.body;
+  if (!name || !email || !nationality || !phone || !persons || persons < 1 || persons > 4 || !dates) {
     res.status(400).json({ error: 'Missing required fields' });
     return;
   }
@@ -48,7 +48,7 @@ module.exports = async function handler(req, res) {
     from: 'noreply@casalucy.nl',
     to: 'casalucyjavea@gmail.com',
     subject: 'Nieuwe reserveringsaanvraag',
-    text: `Naam: ${name}\nEmail: ${email}\nTelefoonnummer: ${phone}\nAantal personen: ${persons}\nData: ${formattedDates}\nOpmerkingen: ${description || ''}`,
+    text: `Naam: ${name}\nEmail: ${email}\nNationaliteit: ${nationality}\nTelefoonnummer: ${phone}\nAantal personen: ${persons}\nData: ${formattedDates}\nOpmerkingen: ${description || ''}`,
   };
 
   try {
