@@ -10,8 +10,8 @@ export default async function handler(req, res) {
   });
 
   const sheets = google.sheets({ version: 'v4', auth });
-  const spreadsheetId = 'JOUW_SHEET_ID_HIER'; // <-- Vervang door je eigen sheet ID
-  const range = 'Sheet1!A:B'; // <-- Pas aan als je sheet anders heet
+  const spreadsheetId = '1b3vwo3yUdagdNCX7ycHf1P8B6qt78kKw3pK95RgNFF8'; // <-- Vervang door je eigen sheet ID
+  const range = 'prijzen!A:B'; // <-- Pas aan als je sheet anders heet
 
   try {
     const response = await sheets.spreadsheets.values.get({
