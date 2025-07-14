@@ -1,58 +1,1269 @@
-import { google } from 'googleapis';
+import React, { useState, useEffect } from "react"
 
-export default async function handler(req, res) {
-  // Haal credentials uit environment variable
-  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+// Eenvoudige SVG icons
+const CalendarIcon = () => (
+    <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+    >
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+)
 
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-  });
+const CheckIcon = () => (
+    <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+    >
+        <path d="M20 6L9 17l-5-5" />
+    </svg>
+)
 
-  const sheets = google.sheets({ version: 'v4', auth });
-  const spreadsheetId = '1b3vwo3yUdagdNCX7ycHf1P8B6qt78kKw3pK95RgNFF8'; // <-- Vervang door je eigen sheet ID
-  const range = 'prijzen!A:B'; // <-- Pas aan als je sheet anders heet
+const XIcon = () => (
+    <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+    >
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+)
 
-  try {
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range,
-    });
+const RefreshIcon = ({ spinning }) => (
+    <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        style={{ animation: spinning ? "spin 1s linear infinite" : "none" }}
+    >
+        <polyline points="23 4 23 10 17 10" />
+        <polyline points="1 20 1 14 7 14" />
+        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+    </svg>
+)
 
-    const rows = response.data.values;
-    if (!rows || rows.length < 2) {
-      return res.status(200).json({ prices: [] });
+const ChevronLeft = () => (
+    <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+    >
+        <polyline points="15,18 9,12 15,6" />
+    </svg>
+)
+
+const ChevronRight = () => (
+    <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+    >
+        <polyline points="9,18 15,12 9,6" />
+    </svg>
+)
+
+const WifiIcon = () => (
+    <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+    >
+        <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+        <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+        <path d="M12 20h.01" />
+    </svg>
+)
+
+export default function FramerCalendarWithWebhook() {
+    const [availability, setAvailability] = useState([])
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState(null)
+    const [currentDate, setCurrentDate] = useState(new Date())
+    const [debugInfo, setDebugInfo] = useState("")
+    const [showBookingForm, setShowBookingForm] = useState(false)
+    const [selectedDate, setSelectedDate] = useState(null)
+    const [selectedDateRange, setSelectedDateRange] = useState({
+        start: null,
+        end: null,
+    })
+    const [isSelectingRange, setIsSelectingRange] = useState(false)
+    const [lastRefresh, setLastRefresh] = useState(new Date())
+    // Zet autoRefresh altijd op true en refreshInterval altijd op 30 seconden
+    const [autoRefresh] = useState(true)
+    const [refreshInterval] = useState(30)
+    const [bookingData, setBookingData] = useState({
+        name: "",
+        email: "",
+        nationality: "",
+        phone: "",
+        persons: "",
+        description: "",
+    })
+    // Voeg state toe voor prijzen
+    const [prices, setPrices] = useState([])
+
+    // Helper functie om te paddden naar 2 cijfers
+    const pad = (n) => n.toString().padStart(2, "0")
+
+    // VERVANG DIT MET JOUW EIGEN VERCEL API URL
+    const API_BASE_URL = "https://mijn-calendar-api-o3f5.vercel.app/api"
+
+    // Auto-refresh functionaliteit
+    useEffect(() => {
+        let interval
+        if (autoRefresh) {
+            interval = setInterval(() => {
+                fetchAvailability(true) // true = silent refresh
+            }, refreshInterval * 1000)
+        }
+        return () => clearInterval(interval)
+    }, [autoRefresh, refreshInterval, currentDate])
+
+    // Initiële load
+    useEffect(() => {
+        fetchAvailability()
+    }, [currentDate])
+
+    // Voeg useEffect toe om prijzen op te halen
+    useEffect(() => {
+        fetch("/api/prices")
+            .then(res => res.json())
+            .then(data => setPrices(data.prices || []))
+            .catch(() => setPrices([]))
+    }, [currentDate])
+
+    const fetchAvailability = async (silent = false) => {
+        try {
+            if (!silent) {
+                setLoading(true)
+                setError(null)
+            }
+
+            // Bereken start en eind van de maand
+            const startDate = new Date(
+                currentDate.getFullYear(),
+                currentDate.getMonth(),
+                1
+            )
+            const endDate = new Date(
+                currentDate.getFullYear(),
+                currentDate.getMonth() + 1,
+                0
+            )
+
+            // Gebruik locale datumstring zonder tijdzoneverschuiving
+            const startStr = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}`
+            const endStr = `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}`
+
+            if (!silent) {
+                setDebugInfo(
+                    `Ophalen beschikbaarheid van ${startStr} tot ${endStr}`
+                )
+            }
+
+            const response = await fetch(
+                `${API_BASE_URL}/availability?startDate=${startStr}&endDate=${endStr}`
+            )
+
+            if (!response.ok) {
+                throw new Error(
+                    `HTTP ${response.status}: ${response.statusText}`
+                )
+            }
+
+            const data = await response.json()
+
+            // Check if data actually changed
+            const currentDataString = JSON.stringify(availability)
+            const newDataString = JSON.stringify(data.availability || [])
+
+            if (currentDataString !== newDataString && silent) {
+                setDebugInfo(
+                    `🔄 Kalender geüpdatet via auto-refresh (${new Date().toLocaleTimeString()})`
+                )
+            }
+
+            setAvailability(data.availability || [])
+            setLastRefresh(new Date())
+
+            if (!silent) {
+                setDebugInfo(
+                    `✅ ${data.availability?.length || 0} dagen beschikbaarheid geladen`
+                )
+            }
+        } catch (err) {
+            if (!silent) {
+                setError(`Fout bij ophalen beschikbaarheid: ${err.message}`)
+                setAvailability([])
+            }
+            console.error("Fetch error:", err)
+        } finally {
+            if (!silent) {
+                setLoading(false)
+            }
+        }
     }
 
-    // Vind de indexen van de kolommen "Datum" en "Prijs"
-    const header = rows[0];
-    const dateIdx = header.findIndex(h => h.toLowerCase().includes('datum'));
-    const priceIdx = header.findIndex(h => h.toLowerCase().includes('prijs'));
+    const handleBooking = async () => {
+        const missingFields = []
+        if (!selectedDateRange.start) missingFields.push("datum")
+        if (!bookingData.name) missingFields.push("naam")
+        if (!bookingData.email) missingFields.push("email")
+        if (!bookingData.nationality) missingFields.push("nationaliteit")
+        if (!bookingData.phone) missingFields.push("telefoonnummer")
+        if (
+            !bookingData.persons ||
+            !["1", "2", "3", "4"].includes(bookingData.persons)
+        )
+            missingFields.push("aantal personen (1-4)")
 
-    if (dateIdx === -1 || priceIdx === -1) {
-      return res.status(400).json({ error: "Sheet mist kolommen 'Datum' of 'Prijs'" });
+        if (missingFields.length > 0) {
+            alert(
+                `Vul de volgende verplichte velden correct in:\n- ${missingFields.join("\n- ")}`
+            )
+            return
+        }
+
+        try {
+            setLoading(true)
+
+            // Maak string van de geboekte data
+            const datesToBook = []
+            const startDate = new Date(selectedDateRange.start)
+            const endDate = new Date(selectedDateRange.end)
+            for (
+                let d = new Date(startDate);
+                d <= endDate;
+                d.setDate(d.getDate() + 1)
+            ) {
+                const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+                datesToBook.push(dateStr)
+            }
+            const datesString =
+                datesToBook.length > 1
+                    ? `${datesToBook[0]} t/m ${datesToBook[datesToBook.length - 1]}`
+                    : datesToBook[0]
+
+            // Stuur reserveringsaanvraag naar eigen backend
+            const response = await fetch(
+                "https://mijn-calendar-api-o3f5.vercel.app/api/reserveringsaanvraag",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        name: bookingData.name,
+                        email: bookingData.email,
+                        nationality: bookingData.nationality,
+                        phone: bookingData.phone,
+                        persons: Number(bookingData.persons),
+                        description: bookingData.description,
+                        dates: datesString,
+                    }),
+                }
+            )
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(
+                    errorData.error || "Reserveringsaanvraag mislukt"
+                )
+            }
+
+            alert(
+                `Reserveringsaanvraag succesvol verstuurd!\nWij nemen zo snel mogelijk contact met je op.`
+            )
+
+            // Reset form
+            setShowBookingForm(false)
+            setSelectedDate(null)
+            setSelectedDateRange({ start: null, end: null })
+            setIsSelectingRange(false)
+            setBookingData({
+                name: "",
+                email: "",
+                nationality: "",
+                phone: "",
+                persons: "",
+                description: "",
+            })
+        } catch (err) {
+            alert(`Fout bij reserveren: ${err.message}`)
+        } finally {
+            setLoading(false)
+        }
     }
 
-    // Verwerk de rijen
-    const prices = rows.slice(1).map(row => {
-      const rawDate = row[dateIdx]; // bv. '12-07-2025'
-      const price = row[priceIdx];
+    const getDaysInMonth = (date) => {
+        const year = date.getFullYear()
+        const month = date.getMonth()
+        const firstDay = new Date(year, month, 1)
+        const lastDay = new Date(year, month + 1, 0)
+        const daysInMonth = lastDay.getDate()
+        // Maandag = 0, dus pas getDay() aan (0=ma, 6=zo)
+        let startingDayOfWeek = firstDay.getDay() - 1
+        if (startingDayOfWeek < 0) startingDayOfWeek = 6
+        const days = []
 
-      // Zet om naar 'YYYY-MM-DD'
-      let date = rawDate;
-      if (/^\d{2}-\d{2}-\d{4}$/.test(rawDate)) {
-        const [day, month, year] = rawDate.split('-');
-        date = `${year}-${month}-${day}`;
-      }
+        // Vul cellen vóór de eerste dag van de maand
+        for (let i = 0; i < startingDayOfWeek; i++) {
+            const prevDate = new Date(year, month, -(startingDayOfWeek - 1 - i))
+            const dateStr = `${prevDate.getFullYear()}-${pad(prevDate.getMonth() + 1)}-${pad(prevDate.getDate())}`
+            const availabilityData = availability.find(
+                (item) => item.date === dateStr
+            )
+            const isAvailable = availabilityData
+                ? availabilityData.available
+                : false
+            // Prijs ophalen
+            const priceData = prices.find((p) => p.date === dateStr)
+            const price = priceData ? priceData.price : null
 
-      return {
-        date,
-        price: Number(price),
-      };
-    });
+            days.push({
+                date: prevDate,
+                dateStr: dateStr,
+                isCurrentMonth: false,
+                isAvailable: isAvailable,
+                price: price,
+            })
+        }
 
-    res.status(200).json({ prices });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+        // Huidige maand
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dayDate = new Date(year, month, day)
+            const dateStr = `${dayDate.getFullYear()}-${pad(dayDate.getMonth() + 1)}-${pad(dayDate.getDate())}`
+            const availabilityData = availability.find(
+                (item) => item.date === dateStr
+            )
+            const isAvailable = availabilityData
+                ? availabilityData.available
+                : true
+            // Prijs ophalen
+            const priceData = prices.find((p) => p.date === dateStr)
+            const price = priceData ? priceData.price : null
+
+            // Check of deze dag in de geselecteerde range valt
+            const isInSelectedRange =
+                selectedDateRange.start &&
+                selectedDateRange.end &&
+                dateStr >= selectedDateRange.start &&
+                dateStr <= selectedDateRange.end
+
+            // Check of deze dag selecteerbaar is tijdens range selectie
+            const isSelectableInRange = isSelectingRange
+                ? isDaySelectableInRange(dayDate, dateStr)
+                : true
+
+            days.push({
+                date: dayDate,
+                dateStr: dateStr,
+                isCurrentMonth: true,
+                isAvailable: isAvailable,
+                isInSelectedRange: isInSelectedRange,
+                isSelectableInRange: isSelectableInRange,
+                price: price,
+            })
+        }
+
+        // Volgende maand (vul rechts op tot 42 cellen)
+        while (days.length < 42) {
+            const nextDate = new Date(
+                year,
+                month,
+                days.length - startingDayOfWeek + 1
+            )
+            const dateStr = `${nextDate.getFullYear()}-${pad(nextDate.getMonth() + 1)}-${pad(nextDate.getDate())}`
+            const availabilityData = availability.find(
+                (item) => item.date === dateStr
+            )
+            const isAvailable = availabilityData
+                ? availabilityData.available
+                : false
+            // Prijs ophalen
+            const priceData = prices.find((p) => p.date === dateStr)
+            const price = priceData ? priceData.price : null
+
+            // Check of deze dag selecteerbaar is tijdens range selectie
+            const isSelectableInRange = isSelectingRange
+                ? isDaySelectableInRange(nextDate, dateStr)
+                : true
+
+            days.push({
+                date: nextDate,
+                dateStr: dateStr,
+                isCurrentMonth: false,
+                isAvailable: isAvailable,
+                isSelectableInRange: isSelectableInRange,
+                price: price,
+            })
+        }
+
+        return days
+    }
+
+    // Helper functie om te bepalen of een dag selecteerbaar is tijdens range selectie
+    const isDaySelectableInRange = (dayDate, dateStr) => {
+        if (!isSelectingRange || !selectedDateRange.start) return true
+
+        const startDate = new Date(selectedDateRange.start)
+        const clickedDate = new Date(dateStr)
+
+        // Selecteerbaar als de dag gelijk is aan de startdatum (voor 1 dag boeking) of na de startdatum ligt
+        if (clickedDate < startDate) return false
+
+        // Zoek naar de eerste niet-beschikbare dag na de startdatum
+        let firstUnavailableAfterStart = null
+        const currentYear = currentDate.getFullYear()
+        const currentMonth = currentDate.getMonth()
+        const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate()
+
+        for (let day = 1; day <= lastDay; day++) {
+            const checkDate = new Date(currentYear, currentMonth, day)
+            const checkDateStr = `${checkDate.getFullYear()}-${pad(checkDate.getMonth() + 1)}-${pad(checkDate.getDate())}`
+            const checkDateObj = new Date(checkDateStr)
+
+            if (checkDateObj >= startDate) {
+                const availabilityData = availability.find(
+                    (item) => item.date === checkDateStr
+                )
+                const isAvailable = availabilityData
+                    ? availabilityData.available
+                    : true
+
+                if (!isAvailable) {
+                    firstUnavailableAfterStart = checkDateStr
+                    break
+                }
+            }
+        }
+
+        // Als er geen niet-beschikbare dag is na de startdatum, is alles selecteerbaar
+        if (!firstUnavailableAfterStart) return true
+
+        // Alleen selecteerbaar als de dag voor de eerste niet-beschikbare dag ligt
+        return dateStr < firstUnavailableAfterStart
+    }
+
+    const handleDayClick = (day) => {
+        if (day.isCurrentMonth && day.isAvailable && day.isSelectableInRange) {
+            if (!isSelectingRange) {
+                // Start nieuwe selectie
+                setSelectedDateRange({ start: day.dateStr, end: day.dateStr })
+                setIsSelectingRange(true)
+            } else {
+                // Voltooi selectie - dezelfde dag of naar voren
+                const startDate = new Date(selectedDateRange.start)
+                const clickedDate = new Date(day.dateStr)
+
+                // Selecteren als de geklikte datum gelijk is aan de startdatum (1 dag) of na de startdatum ligt
+                if (clickedDate >= startDate) {
+                    const endDate = findLastAvailableDateAfter(
+                        startDate,
+                        clickedDate
+                    )
+                    setSelectedDateRange({
+                        start: selectedDateRange.start,
+                        end: endDate,
+                    })
+                }
+
+                setIsSelectingRange(false)
+                setShowBookingForm(true)
+            }
+        }
+    }
+
+    const handleDayHover = (day) => {
+        if (
+            isSelectingRange &&
+            day.isCurrentMonth &&
+            day.isAvailable &&
+            day.isSelectableInRange
+        ) {
+            const startDate = new Date(selectedDateRange.start)
+            const hoveredDate = new Date(day.dateStr)
+
+            // Dezelfde dag of naar voren selecteren
+            if (hoveredDate >= startDate) {
+                const endDate = findLastAvailableDateAfter(
+                    startDate,
+                    hoveredDate
+                )
+                setSelectedDateRange({
+                    start: selectedDateRange.start,
+                    end: endDate,
+                })
+            }
+        }
+    }
+
+    // Helper functie om de laatste beschikbare datum voor een bepaalde datum te vinden
+    const findLastAvailableDateBefore = (targetDate, maxDate) => {
+        const days = getDaysInMonth(currentDate)
+        let lastAvailable = targetDate
+
+        // Zoek naar achteren vanaf maxDate tot targetDate
+        for (let i = days.length - 1; i >= 0; i--) {
+            const day = days[i]
+            if (day.isCurrentMonth && day.dateStr) {
+                const dayDate = new Date(day.dateStr)
+                if (dayDate <= maxDate && dayDate >= targetDate) {
+                    if (day.isAvailable) {
+                        lastAvailable = day.dateStr
+                        break
+                    } else {
+                        // Stop bij de eerste niet-beschikbare dag
+                        break
+                    }
+                }
+            }
+        }
+
+        return lastAvailable
+    }
+
+    // Helper functie om de laatste beschikbare datum na een bepaalde datum te vinden
+    const findLastAvailableDateAfter = (startDate, maxDate) => {
+        const days = getDaysInMonth(currentDate)
+        let lastAvailable = startDate
+
+        // Zoek naar voren vanaf startDate tot maxDate
+        for (let i = 0; i < days.length; i++) {
+            const day = days[i]
+            if (day.isCurrentMonth && day.dateStr) {
+                const dayDate = new Date(day.dateStr)
+                if (dayDate >= startDate && dayDate <= maxDate) {
+                    if (day.isAvailable) {
+                        lastAvailable = day.dateStr
+                    } else {
+                        // Stop bij de eerste niet-beschikbare dag
+                        break
+                    }
+                } else if (dayDate > maxDate) {
+                    break
+                }
+            }
+        }
+
+        return lastAvailable
+    }
+
+    const goToPreviousMonth = () => {
+        setCurrentDate(
+            new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
+        )
+    }
+
+    const goToNextMonth = () => {
+        setCurrentDate(
+            new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
+        )
+    }
+
+    const formatMonthYear = (date) => {
+        return new Intl.DateTimeFormat("nl-NL", {
+            year: "numeric",
+            month: "long",
+        }).format(date)
+    }
+
+    const isToday = (date) => {
+        const today = new Date()
+        return date.toDateString() === today.toDateString()
+    }
+
+    const days = getDaysInMonth(currentDate)
+    // Zet maandag als eerste dag van de week
+    const weekdays = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"]
+    const availableDays = days.filter(
+        (day) => day.isCurrentMonth && day.isAvailable
+    ).length
+    const bookedDays = days.filter(
+        (day) => day.isCurrentMonth && !day.isAvailable
+    ).length
+
+    const styles = {
+        container: {
+            maxWidth: "1000px",
+            margin: "0 auto",
+            padding: "24px",
+            backgroundColor: "white",
+            borderRadius: "8px",
+            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+            fontFamily: "Arial, sans-serif",
+        },
+        header: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "24px",
+        },
+        title: {
+            fontSize: "24px",
+            fontWeight: "bold",
+            color: "#111827",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+        },
+        headerControls: {
+            display: "flex",
+            gap: "12px",
+            alignItems: "center",
+        },
+        refreshButton: {
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            color: "#3b82f6",
+            backgroundColor: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: "8px 12px",
+            borderRadius: "6px",
+            transition: "all 0.2s",
+        },
+        autoRefreshToggle: {
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            fontSize: "14px",
+        },
+        checkbox: {
+            width: "16px",
+            height: "16px",
+        },
+        select: {
+            padding: "4px 8px",
+            borderRadius: "4px",
+            border: "1px solid #d1d5db",
+            fontSize: "14px",
+        },
+        statusPanel: {
+            marginBottom: "16px",
+            padding: "16px",
+            backgroundColor: "#f9fafb",
+            border: "1px solid #e5e7eb",
+            borderRadius: "8px",
+        },
+        statusGrid: {
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: "16px",
+            alignItems: "center",
+        },
+        statusItem: {
+            display: "flex",
+            flexDirection: "column",
+            gap: "4px",
+        },
+        statusLabel: {
+            fontSize: "12px",
+            color: "#6b7280",
+            fontWeight: "600",
+        },
+        statusValue: {
+            fontSize: "14px",
+            fontWeight: "600",
+        },
+        connectionStatus: {
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "6px 12px",
+            borderRadius: "20px",
+            fontSize: "12px",
+            fontWeight: "600",
+        },
+        connected: {
+            backgroundColor: "#dcfce7",
+            color: "#166534",
+        },
+        disconnected: {
+            backgroundColor: "#fee2e2",
+            color: "#dc2626",
+        },
+        statsGrid: {
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "16px",
+            marginBottom: "24px",
+        },
+        statCard: {
+            padding: "16px",
+            borderRadius: "8px",
+            border: "1px solid",
+        },
+        statCardAvailable: {
+            backgroundColor: "#f0fdf4",
+            borderColor: "#bbf7d0",
+        },
+        statCardBooked: {
+            backgroundColor: "#fef2f2",
+            borderColor: "#fecaca",
+        },
+        statHeader: {
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+        },
+        statNumber: {
+            fontSize: "24px",
+            fontWeight: "bold",
+            marginTop: "4px",
+        },
+        navigation: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "16px",
+        },
+        navButton: {
+            padding: "8px",
+            backgroundColor: "transparent",
+            border: "none",
+            cursor: "pointer",
+            borderRadius: "8px",
+            transition: "background-color 0.2s",
+        },
+        monthTitle: {
+            fontSize: "20px",
+            fontWeight: "600",
+            color: "#111827",
+        },
+        calendarContainer: {
+            backgroundColor: "#FAF9F5",
+            borderRadius: "8px",
+            padding: "16px",
+        },
+        weekdayGrid: {
+            display: "grid",
+            gridTemplateColumns: "repeat(7, 1fr)",
+            gap: "8px",
+            marginBottom: "12px",
+        },
+        weekdayHeader: {
+            textAlign: "center",
+            fontSize: "14px",
+            fontWeight: "600",
+            color: "#374151",
+            padding: "8px",
+            backgroundColor: "#FAF9F5",
+            borderRadius: "12px",
+        },
+        daysGrid: {
+            display: "grid",
+            gridTemplateColumns: "repeat(7, 1fr)",
+            gap: "8px",
+        },
+        dayCell: {
+            height: "48px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "14px",
+            fontWeight: "500",
+            borderRadius: "8px",
+            cursor: "pointer",
+            transition: "all 0.2s",
+            position: "relative",
+            border: "2px solid",
+        },
+        dayIcon: {
+            position: "absolute",
+            top: "4px",
+            right: "4px",
+        },
+        modal: {
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+        },
+        modalContent: {
+            backgroundColor: "white",
+            padding: "24px",
+            borderRadius: "8px",
+            width: "90%",
+            maxWidth: "500px",
+            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+        },
+        formGroup: {
+            marginBottom: "16px",
+        },
+        label: {
+            display: "block",
+            fontSize: "14px",
+            fontWeight: "600",
+            color: "#374151",
+            marginBottom: "6px",
+        },
+        input: {
+            width: "100%",
+            padding: "8px 12px",
+            border: "1px solid #d1d5db",
+            borderRadius: "6px",
+            fontSize: "14px",
+            boxSizing: "border-box",
+        },
+        textarea: {
+            width: "100%",
+            padding: "8px 12px",
+            border: "1px solid #d1d5db",
+            borderRadius: "6px",
+            fontSize: "14px",
+            minHeight: "80px",
+            resize: "vertical",
+            boxSizing: "border-box",
+        },
+        buttonGroup: {
+            display: "flex",
+            gap: "12px",
+            marginTop: "20px",
+        },
+        button: {
+            padding: "10px 20px",
+            borderRadius: "6px",
+            fontSize: "14px",
+            fontWeight: "600",
+            cursor: "pointer",
+            transition: "all 0.2s",
+            border: "none",
+        },
+        buttonPrimary: {
+            backgroundColor: "#3b82f6",
+            color: "white",
+        },
+        buttonSecondary: {
+            backgroundColor: "#f3f4f6",
+            color: "#374151",
+        },
+    }
+
+    return (
+        <div style={styles.container}>
+            <style>
+                {`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}
+            </style>
+
+            {/* Header */}
+            {/* VERWIJDERD: Titel, auto-refresh toggle, selectie seconden en Vernieuwen-knop */}
+
+            {/* Enhanced Status Panel */}
+            {/* VERWIJDERD: Status Panel met API verbinding, laatste update, status, debugInfo */}
+
+            {/* Error warning */}
+            {error && (
+                <div
+                    style={{
+                        marginBottom: "16px",
+                        padding: "16px",
+                        backgroundColor: "#fef2f2",
+                        border: "1px solid #fecaca",
+                        borderRadius: "8px",
+                        color: "#dc2626",
+                        fontSize: "14px",
+                    }}
+                >
+                    {error}
+                </div>
+            )}
+
+            {/* Stats */}
+            {/* VERWIJDERD: Stats blok met Beschikbaar en Bezet aantal dagen */}
+
+            {/* Instructions */}
+            {isSelectingRange && (
+                <div
+                    style={{
+                        marginBottom: "16px",
+                        padding: "12px",
+                        backgroundColor: "#FAF9F5",
+                        border: "1px solid #E9D8A6",
+                        borderRadius: "8px",
+                        color: "#111111",
+                        fontSize: "14px",
+                        textAlign: "center",
+                    }}
+                >
+                    Klik op dezelfde dag of een latere dag om je selectie te
+                    voltooien.
+                </div>
+            )}
+
+            {/* Calendar Navigation */}
+            <div style={styles.navigation}>
+                <button
+                    onClick={goToPreviousMonth}
+                    style={styles.navButton}
+                    onMouseOver={(e) =>
+                        (e.target.style.backgroundColor = "#f3f4f6")
+                    }
+                    onMouseOut={(e) =>
+                        (e.target.style.backgroundColor = "transparent")
+                    }
+                >
+                    <ChevronLeft />
+                </button>
+                <h3 style={styles.monthTitle}>
+                    {formatMonthYear(currentDate)}
+                </h3>
+                <button
+                    onClick={goToNextMonth}
+                    style={styles.navButton}
+                    onMouseOver={(e) =>
+                        (e.target.style.backgroundColor = "#f3f4f6")
+                    }
+                    onMouseOut={(e) =>
+                        (e.target.style.backgroundColor = "transparent")
+                    }
+                >
+                    <ChevronRight />
+                </button>
+            </div>
+
+            {/* Calendar Grid */}
+            <div style={styles.calendarContainer}>
+                {/* Weekday headers */}
+                <div style={styles.weekdayGrid}>
+                    {weekdays.map((day) => (
+                        <div key={day} style={styles.weekdayHeader}>
+                            {day}
+                        </div>
+                    ))}
+                </div>
+
+                {/* Calendar days */}
+                <div style={styles.daysGrid}>
+                    {days.map((day, index) => {
+                        const dayIsToday = isToday(day.date)
+                        const isPast =
+                            day.date < new Date(new Date().setHours(0, 0, 0, 0))
+                        let dayStyle = {
+                            ...styles.dayCell,
+                        }
+
+                        // Bepaal status-achtergrond
+                        let statusBg = day.isAvailable ? "#bbf7d0" : "#fecaca"
+                        let statusColor = day.isAvailable
+                            ? "#065f46"
+                            : "#7f1d1d"
+                        let statusBorder = day.isAvailable
+                            ? "#4ade80"
+                            : "#f87171"
+
+                        // Prioriteit: geselecteerd > vandaag > status
+                        if (day.isInSelectedRange) {
+                            dayStyle = {
+                                ...dayStyle,
+                                backgroundColor: "#F4EDE4",
+                                color: "#111111",
+                                borderColor: "#E9D8A6",
+                                boxShadow: "none",
+                                cursor: "pointer",
+                            }
+                        } else if (dayIsToday) {
+                            // Herstel: vandaag krijgt exact dezelfde stijl als status
+                            dayStyle = {
+                                ...dayStyle,
+                                backgroundColor: statusBg,
+                                color: statusColor,
+                                borderColor: statusBorder,
+                            }
+                        } else if (!day.isCurrentMonth || isPast) {
+                            dayStyle = {
+                                ...dayStyle,
+                                color: "#9ca3af",
+                                backgroundColor: "#f3f4f6",
+                                borderColor: "#e5e7eb",
+                                cursor:
+                                    !day.isCurrentMonth && !isPast
+                                        ? "pointer"
+                                        : "default",
+                            }
+                        } else {
+                            dayStyle = {
+                                ...dayStyle,
+                                backgroundColor: statusBg,
+                                color: statusColor,
+                                borderColor: statusBorder,
+                                cursor: day.isAvailable ? "pointer" : "default",
+                                opacity:
+                                    day.isAvailable && !day.isSelectableInRange
+                                        ? 0.6
+                                        : 1,
+                            }
+                        }
+
+                        return (
+                            <div
+                                key={index}
+                                style={dayStyle}
+                                title={
+                                    !day.isCurrentMonth || isPast
+                                        ? !isPast
+                                            ? "Klik om naar deze maand te gaan"
+                                            : "Niet beschikbaar"
+                                        : day.isAvailable &&
+                                            day.isSelectableInRange
+                                          ? "Klik om te boeken"
+                                          : day.isAvailable &&
+                                              !day.isSelectableInRange
+                                            ? "Niet selecteerbaar in deze range"
+                                            : "Bezet"
+                                }
+                                onClick={() => {
+                                    if (
+                                        day.isCurrentMonth &&
+                                        day.isAvailable &&
+                                        day.isSelectableInRange &&
+                                        !isPast
+                                    ) {
+                                        handleDayClick(day)
+                                    } else if (!day.isCurrentMonth && !isPast) {
+                                        setCurrentDate(
+                                            new Date(
+                                                day.date.getFullYear(),
+                                                day.date.getMonth(),
+                                                1
+                                            )
+                                        )
+                                    }
+                                }}
+                                onMouseOver={(e) => {
+                                    if (
+                                        day.isCurrentMonth &&
+                                        day.isAvailable &&
+                                        day.isSelectableInRange &&
+                                        !isPast
+                                    ) {
+                                        e.target.style.transform = "scale(1.05)"
+                                        handleDayHover(day)
+                                    } else if (!day.isCurrentMonth && !isPast) {
+                                        e.target.style.transform = "scale(1.05)"
+                                    }
+                                }}
+                                onMouseOut={(e) => {
+                                    e.target.style.transform = "scale(1)"
+                                }}
+                            >
+                                <span style={{ fontWeight: "bold" }}>
+                                    {day.date.getDate()}
+                                </span>
+                                {dayIsToday && (
+                                    <span
+                                        style={{
+                                            position: "absolute",
+                                            top: 4,
+                                            right: 4,
+                                            width: 8,
+                                            height: 8,
+                                            borderRadius: "50%",
+                                            background: "#E9D8A6",
+                                            display: "inline-block",
+                                        }}
+                                    />
+                                )}
+                                {day.price !== null && (
+                                    <span style={{ fontSize: "12px", color: "#888", display: "block" }}>
+                                        €{day.price}
+                                    </span>
+                                )}
+                                {/* Geen icoon meer tonen bij de dag */}
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* Booking Form Modal */}
+            {showBookingForm && (
+                <div style={styles.modal}>
+                    <div style={styles.modalContent}>
+                        <h3
+                            style={{
+                                margin: "0 0 20px 0",
+                                fontSize: "20px",
+                                fontWeight: "600",
+                            }}
+                        >
+                            Boekingsreservering maken voor{" "}
+                            {selectedDateRange.start === selectedDateRange.end
+                                ? new Date(
+                                      selectedDateRange.start
+                                  ).toLocaleDateString("nl-NL")
+                                : `${new Date(selectedDateRange.start).toLocaleDateString("nl-NL")} t/m ${new Date(selectedDateRange.end).toLocaleDateString("nl-NL")}`}
+                        </h3>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Naam *</label>
+                            <input
+                                type="text"
+                                value={bookingData.name}
+                                onChange={(e) =>
+                                    setBookingData({
+                                        ...bookingData,
+                                        name: e.target.value,
+                                    })
+                                }
+                                style={styles.input}
+                                placeholder="Uw naam"
+                            />
+                        </div>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Email *</label>
+                            <input
+                                type="email"
+                                value={bookingData.email}
+                                onChange={(e) =>
+                                    setBookingData({
+                                        ...bookingData,
+                                        email: e.target.value,
+                                    })
+                                }
+                                style={styles.input}
+                                placeholder="uw@email.com"
+                            />
+                        </div>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Nationaliteit *</label>
+                            <input
+                                type="text"
+                                value={bookingData.nationality}
+                                onChange={(e) =>
+                                    setBookingData({
+                                        ...bookingData,
+                                        nationality: e.target.value,
+                                    })
+                                }
+                                style={styles.input}
+                                placeholder="Uw nationaliteit"
+                            />
+                        </div>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Telefoonnummer *</label>
+                            <input
+                                type="tel"
+                                value={bookingData.phone}
+                                onChange={(e) =>
+                                    setBookingData({
+                                        ...bookingData,
+                                        phone: e.target.value,
+                                    })
+                                }
+                                style={styles.input}
+                                placeholder="Uw telefoonnummer"
+                            />
+                        </div>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>
+                                Aantal personen *
+                            </label>
+                            <select
+                                value={bookingData.persons}
+                                onChange={(e) =>
+                                    setBookingData({
+                                        ...bookingData,
+                                        persons: e.target.value,
+                                    })
+                                }
+                                style={styles.input}
+                            >
+                                <option value="">Maak een keuze</option>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                            </select>
+                        </div>
+                        <div style={styles.formGroup}>
+                            <label style={styles.label}>Opmerkingen</label>
+                            <textarea
+                                value={bookingData.description}
+                                onChange={(e) =>
+                                    setBookingData({
+                                        ...bookingData,
+                                        description: e.target.value,
+                                    })
+                                }
+                                style={styles.textarea}
+                                placeholder="Extra informatie..."
+                            />
+                        </div>
+                        <div style={styles.buttonGroup}>
+                            <button
+                                onClick={handleBooking}
+                                disabled={loading}
+                                style={{
+                                    ...styles.button,
+                                    ...styles.buttonPrimary,
+                                }}
+                            >
+                                {loading ? "Boeken..." : "Bevestigen"}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowBookingForm(false)
+                                    setSelectedDate(null)
+                                    setSelectedDateRange({
+                                        start: null,
+                                        end: null,
+                                    })
+                                    setIsSelectingRange(false)
+                                }}
+                                style={{
+                                    ...styles.button,
+                                    ...styles.buttonSecondary,
+                                }}
+                            >
+                                Annuleren
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Instructions */}
+            {/* VERWIJDERD: Blok met tekst 'Real-time functionaliteit' en subteksten */}
+        </div>
+    )
 }
