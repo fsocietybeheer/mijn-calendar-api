@@ -4,11 +4,28 @@ export default async function handler(req, res) {
   console.log("prices.js endpoint aangeroepen");
 
   try {
+    // Check of alle benodigde environment variables aanwezig zijn
+    if (!process.env.GOOGLE_SHEETS_ACCOUNT_EMAIL || !process.env.GOOGLE_SHEETS_PRIVATE_KEY) {
+      throw new Error('Missing required environment variables');
+    }
+
     // Gebruik je bestaande environment variables voor service account
+    let privateKey = process.env.GOOGLE_SHEETS_PRIVATE_KEY;
+    
+    // Handle verschillende private key formaten
+    if (privateKey.includes('\\n')) {
+      privateKey = privateKey.replace(/\\n/g, '\n');
+    }
+    
+    // Zorg ervoor dat de key correct begint en eindigt
+    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+      throw new Error('Invalid private key format');
+    }
+
     const credentials = {
       type: "service_account",
       client_email: process.env.GOOGLE_SHEETS_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      private_key: privateKey,
     };
 
     const auth = new google.auth.GoogleAuth({
