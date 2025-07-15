@@ -88,9 +88,17 @@ export default async function handler(req, res) {
       const price = row[priceIdx];
 
       let date = rawDate;
-      if (/^\d{2}-\d{2}-\d{4}$/.test(rawDate)) {
-        const [day, month, year] = rawDate.split('-');
-        date = `${year}-${month}-${day}`;
+      // Maak de datumconversie robuuster
+      if (typeof rawDate === 'string') {
+        const cleanedDate = rawDate.trim();
+        const parts = cleanedDate.split('-');
+        if (parts.length === 3) {
+          // Zorg voor voorloopnullen
+          const day = parts[0].padStart(2, '0');
+          const month = parts[1].padStart(2, '0');
+          const year = parts[2];
+          date = `${year}-${month}-${day}`;
+        }
       }
 
       return {
