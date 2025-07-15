@@ -46,7 +46,7 @@ export default async function handler(req, res) {
     console.log('Auth created, testing connection...');
     
     const sheets = google.sheets({ version: 'v4', auth });
-    const range = 'Sheet1!A:B';
+    const range = 'prijzen!A:B';
 
     console.log('Attempting to read sheet:', requiredEnvVars.sheetId);
     
