@@ -2,10 +2,14 @@ import { google } from 'googleapis';
 
 export default async function handler(req, res) {
   console.log("prices.js endpoint aangeroepen");
-  console.log("GOOGLE_SERVICE_ACCOUNT_JSON aanwezig?", !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
 
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    // Gebruik je bestaande environment variables voor service account
+    const credentials = {
+      type: "service_account",
+      client_email: process.env.GOOGLE_SHEETS_ACCOUNT_EMAIL,
+      private_key: process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    };
 
     const auth = new google.auth.GoogleAuth({
       credentials,
@@ -13,8 +17,8 @@ export default async function handler(req, res) {
     });
 
     const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = '1b3vwo3yUdagdNCX7ycHf1P8B6qt78kKw3pK95RgNFF8'; // <-- Jouw sheet ID
-    const range = 'Sheet1!A:B'; // <-- Pas aan als je tabblad anders heet
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+    const range = 'Sheet1!A:B'; // Pas aan als je tabblad anders heet
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -62,4 +66,3 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message });
   }
 }
-
