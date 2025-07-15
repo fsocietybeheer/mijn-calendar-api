@@ -7,41 +7,25 @@ export default async function handler(req, res) {
     // Check environment variables
     const requiredEnvVars = {
       email: process.env.GOOGLE_SHEETS_ACCOUNT_EMAIL,
-      privateKey: process.env.GOOGLE_SHEETS_PRIVATE_KEY,
+      privateKeyBase64: process.env.GOOGLE_SHEETS_PRIVATE_KEY_BASE64,
       sheetId: process.env.GOOGLE_SHEET_ID
     };
 
-    // Debug log (verwijder later)
     console.log('Environment check:', {
       hasEmail: !!requiredEnvVars.email,
-      hasPrivateKey: !!requiredEnvVars.privateKey,
+      hasPrivateKeyBase64: !!requiredEnvVars.privateKeyBase64,
       hasSheetId: !!requiredEnvVars.sheetId,
-      privateKeyLength: requiredEnvVars.privateKey?.length,
-      privateKeyStart: requiredEnvVars.privateKey?.substring(0, 50)
+      privateKeyBase64Length: requiredEnvVars.privateKeyBase64?.length
     });
 
-    if (!requiredEnvVars.email || !requiredEnvVars.privateKey || !requiredEnvVars.sheetId) {
+    if (!requiredEnvVars.email || !requiredEnvVars.privateKeyBase64 || !requiredEnvVars.sheetId) {
       throw new Error('Missing required environment variables');
     }
 
-    // Private key formatting - verschillende methoden proberen
-    let privateKey = requiredEnvVars.privateKey;
+    // Decode base64 private key
+    const privateKey = Buffer.from(requiredEnvVars.privateKeyBase64, 'base64').toString('utf8');
     
-    // Method 1: Replace escaped newlines
-    if (privateKey.includes('\\n')) {
-      privateKey = privateKey.replace(/\\n/g, '\n');
-    }
-    
-    // Method 2: Als het nog steeds niet werkt, probeer direct JSON parse
-    if (!privateKey.includes('\n') && privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
-      try {
-        privateKey = JSON.parse(`"${privateKey}"`);
-      } catch (e) {
-        console.log('JSON parse failed, using as-is');
-      }
-    }
-
-    console.log('Private key processed:', {
+    console.log('Private key decoded:', {
       startsCorrectly: privateKey.startsWith('-----BEGIN PRIVATE KEY-----'),
       endsCorrectly: privateKey.endsWith('-----END PRIVATE KEY-----'),
       hasNewlines: privateKey.includes('\n'),
@@ -61,10 +45,6 @@ export default async function handler(req, res) {
 
     console.log('Auth created, testing connection...');
     
-    // Test the auth first
-    const authClient = await auth.getClient();
-    console.log('Auth client obtained successfully');
-
     const sheets = google.sheets({ version: 'v4', auth });
     const range = 'Sheet1!A:B';
 
@@ -83,7 +63,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ prices: [] });
     }
 
-    // Process data (rest van je code blijft hetzelfde)
+    // Process data
     const header = rows[0];
     const dateIdx = header.findIndex(h => h.toLowerCase().includes('datum'));
     const priceIdx = header.findIndex(h => h.toLowerCase().includes('prijs'));
@@ -122,8 +102,7 @@ export default async function handler(req, res) {
     
     res.status(500).json({ 
       error: err.message,
-      code: err.code,
-      opensslErrorStack: err.opensslErrorStack 
+      code: err.code
     });
   }
 }
